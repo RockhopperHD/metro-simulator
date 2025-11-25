@@ -6,7 +6,7 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
       // ADD THIS LINE BELOW:
-      base: 'metro-simulator', 
+      base: '/metro-simulator/', 
       server: {
         port: 3000,
         host: '0.0.0.0',
