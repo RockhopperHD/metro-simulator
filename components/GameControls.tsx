@@ -1,29 +1,38 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { METRO_DATA } from '../data/metroData';
-import { Neighbor } from '../types';
+import { getLinesForStation } from '../utils/gameLogic';
+import { Neighbor, Outage } from '../types';
 
 interface GameControlsProps {
+    mode: 'FREE' | 'WORK';
     currentStation: string;
     currentLine: string | null;
     neighbors: Neighbor[];
     transferLines: string[];
+    targetStation: string | null;
+    knownOutages: Outage[]; // Pass known outages to gray out buttons
     onMove: (station: string, line: string) => void;
     onStartLine: (line: string) => void;
     onTransfer: (line: string) => void;
     onEnd: () => void;
     onUndo: () => void;
+    onToggleMap: () => void;
 }
 
 const GameControls: React.FC<GameControlsProps> = ({ 
+    mode,
     currentStation, 
     currentLine, 
     neighbors, 
     transferLines, 
+    targetStation,
+    knownOutages,
     onMove, 
     onStartLine, 
     onTransfer,
     onEnd,
-    onUndo
+    onUndo,
+    onToggleMap
 }) => {
     // Determine initial mode based on current line or defaults
     const [viewMode, setViewMode] = useState<'METRO' | 'CERCANIAS'>('METRO');
@@ -35,6 +44,12 @@ const GameControls: React.FC<GameControlsProps> = ({
             setViewMode('METRO');
         }
     }, [currentLine, currentStation]);
+
+    // Get lines for target station if it exists
+    const targetLines = useMemo(() => {
+        if (!targetStation) return [];
+        return getLinesForStation(targetStation).filter(l => !l.startsWith('C-')); // Show Metro lines primarily
+    }, [targetStation]);
     
     // Helper to get line badge style
     const getBadgeStyle = (lineCode: string) => {
@@ -80,9 +95,9 @@ const GameControls: React.FC<GameControlsProps> = ({
     return (
         <div className="p-4 flex-1 flex flex-col bg-white shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-10 rounded-t-3xl relative -mt-4">
             <div className="mb-4 flex justify-between items-start">
-                <div>
+                <div className="flex-1">
                     <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Estación Actual</span>
-                    <h2 className="text-3xl font-black text-gray-800 leading-tight mb-2">{currentStation}</h2>
+                    <h2 className="text-3xl font-black text-gray-800 leading-tight mb-2 break-words">{currentStation}</h2>
                     <div className="flex gap-2 flex-wrap">
                         {/* Display badges for all lines at this station */}
                         {[...(currentLine ? [currentLine] : []), ...transferLines].sort().map(line => (
@@ -96,14 +111,56 @@ const GameControls: React.FC<GameControlsProps> = ({
                         ))}
                     </div>
                 </div>
-                <button 
-                    onClick={onUndo}
-                    className="p-2 text-gray-400 hover:text-gray-800 transition-colors"
-                    title="Deshacer"
-                >
-                    <i className="fa-solid fa-rotate-left text-xl"></i>
-                </button>
+                
+                <div className="flex gap-2 ml-2">
+                    <button 
+                        onClick={onToggleMap}
+                        className="p-2 w-10 h-10 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors flex items-center justify-center"
+                        title="Ver Mapa"
+                    >
+                        <i className="fa-solid fa-map"></i>
+                    </button>
+
+                    {mode === 'FREE' && (
+                        <button 
+                            onClick={onUndo}
+                            className="p-2 w-10 h-10 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-800 transition-colors flex items-center justify-center"
+                            title="Deshacer"
+                        >
+                            <i className="fa-solid fa-rotate-left"></i>
+                        </button>
+                    )}
+                </div>
             </div>
+            
+            {targetStation && (
+                <div className="mb-4 p-3 bg-indigo-50 border border-indigo-100 rounded-xl">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center text-white text-xs shrink-0">
+                            <i className="fa-solid fa-location-dot"></i>
+                        </div>
+                        <div>
+                            <div className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider">Destino</div>
+                            <div className="font-bold text-gray-800 leading-tight">{targetStation}</div>
+                        </div>
+                    </div>
+                    {/* Destination Lines */}
+                    <div className="flex items-center gap-2 pl-11">
+                        <span className="text-[10px] text-gray-400 uppercase font-bold">Correspondencia:</span>
+                        <div className="flex gap-1 flex-wrap">
+                            {targetLines.map(line => (
+                                <span 
+                                    key={line}
+                                    className={`inline-flex items-center justify-center w-5 h-5 ${getShapeClass(line)} text-[10px] font-bold`}
+                                    style={getBadgeStyle(line)}
+                                >
+                                    {line}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="flex-1 overflow-y-auto space-y-2 pr-1">
                 {/* 1. MOVEMENT CONTROLS */}
@@ -115,21 +172,39 @@ const GameControls: React.FC<GameControlsProps> = ({
                         )}
                         {neighbors.map((n, idx) => {
                              const style = METRO_DATA.colors[currentLine];
+                             
+                             // Check if this specific route is blocked
+                             const isBlocked = knownOutages.some(o => 
+                                o.line === currentLine && 
+                                ((o.fromStation === currentStation && o.toStation === n.station) ||
+                                 (o.fromStation === n.station && o.toStation === currentStation))
+                             );
+
                              return (
                                 <button
                                     key={`${n.station}-${idx}`}
-                                    onClick={() => onMove(n.station, currentLine)}
-                                    className="w-full text-left p-3 rounded-xl border-2 border-gray-100 mb-2 hover:border-blue-100 hover:bg-blue-50 transition-all flex items-center group active:scale-[0.98]"
+                                    onClick={() => !isBlocked && onMove(n.station, currentLine)}
+                                    disabled={isBlocked}
+                                    className={`w-full text-left p-3 rounded-xl border-2 mb-2 transition-all flex items-center group active:scale-[0.98]
+                                        ${isBlocked 
+                                            ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed grayscale' 
+                                            : 'border-gray-100 hover:border-blue-100 hover:bg-blue-50'
+                                        }
+                                    `}
                                 >
                                     <div 
-                                        className={`w-10 h-10 ${getShapeClass(currentLine)} flex items-center justify-center mr-3 font-bold text-sm shrink-0 transition-transform group-hover:scale-110`}
+                                        className={`w-10 h-10 ${getShapeClass(currentLine)} flex items-center justify-center mr-3 font-bold text-sm shrink-0 transition-transform ${!isBlocked && 'group-hover:scale-110'}`}
                                         style={{ backgroundColor: style.bg, color: style.text, border: style.border ? `2px solid ${style.border}` : undefined }}
                                     >
-                                        <i className="fa-solid fa-arrow-right"></i>
+                                        {isBlocked ? <i className="fa-solid fa-ban"></i> : <i className="fa-solid fa-arrow-right"></i>}
                                     </div>
                                     <div>
-                                        <div className="font-bold text-gray-800">{n.station}</div>
-                                        <div className="text-xs text-gray-500">Hacia {n.direction}</div>
+                                        <div className={`font-bold ${isBlocked ? 'text-gray-400 decoration-slice' : 'text-gray-800'}`}>
+                                            {n.station}
+                                        </div>
+                                        <div className="text-xs text-gray-500">
+                                            {isBlocked ? 'Servicio Interrumpido' : `Hacia ${n.direction}`}
+                                        </div>
                                     </div>
                                 </button>
                             );
@@ -194,13 +269,22 @@ const GameControls: React.FC<GameControlsProps> = ({
                 )}
             </div>
 
-            <button 
-                onClick={onEnd}
-                className="mt-4 w-full py-4 bg-gray-900 text-white rounded-2xl font-bold text-lg hover:bg-black shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
-            >
-                <i className="fa-solid fa-flag-checkered"></i>
-                Finalizar Viaje
-            </button>
+            {/* In Work mode, button is hidden until destination reached, or maybe "Give up" button? For now keep End Game */}
+            {!targetStation && (
+                <button 
+                    onClick={onEnd}
+                    className="mt-4 w-full py-4 bg-gray-900 text-white rounded-2xl font-bold text-lg hover:bg-black shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                    <i className="fa-solid fa-flag-checkered"></i>
+                    Finalizar Viaje
+                </button>
+            )}
+            
+            {targetStation && (
+                <div className="mt-4 p-4 bg-gray-100 text-gray-400 rounded-2xl font-bold text-center text-sm">
+                    Llega a {targetStation} para finalizar
+                </div>
+            )}
         </div>
     );
 };
