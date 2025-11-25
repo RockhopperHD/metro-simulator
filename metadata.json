@@ -1,0 +1,5 @@
+{
+  "name": "Madrid Metro Quest",
+  "description": "Un simulador de transporte interactivo donde exploras el sistema de Metro de Madrid, ganando puntos de rareza basados en tu ruta y transbordos.",
+  "requestFramePermissions": []
+}
