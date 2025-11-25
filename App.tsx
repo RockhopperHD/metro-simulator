@@ -262,6 +262,12 @@ const App: React.FC = () => {
         if (!gameState.currentStation || !gameState.currentLine) return [];
         const neighbors = getNeighbors(gameState.currentLine, gameState.currentStation);
         
+        // Prevent Soft-lock: If there is only one neighbor, it means we are at a terminal end
+        // or a stub. We MUST allow the player to go back, otherwise they are stuck.
+        if (neighbors.length === 1) {
+            return neighbors;
+        }
+
         // Anti-spam: Do not allow going back to the immediate previous station on 'travel' steps
         // BUT: In WORK mode, outages might force backtracking, so we allow it.
         if (gameState.mode === 'FREE') {
@@ -332,8 +338,8 @@ const App: React.FC = () => {
                 
                 {/* Header */}
                 <div className="bg-gray-900 p-4 shrink-0 flex justify-between items-center shadow-md z-30 relative">
-                    <div>
-                        <h1 className="text-lg font-bold uppercase tracking-wider flex items-center text-white">
+                    <div onClick={handleBackToMenu} className="cursor-pointer group">
+                        <h1 className="text-lg font-bold uppercase tracking-wider flex items-center text-white group-hover:text-blue-300 transition-colors">
                             <i className="fa-solid fa-map-location-dot mr-2 text-blue-400"></i>
                             Metro Quest
                         </h1>

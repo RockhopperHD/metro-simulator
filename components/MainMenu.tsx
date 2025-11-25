@@ -54,25 +54,34 @@ const MainMenu: React.FC<MainMenuProps> = ({ onSelectFreeMode, onSelectWorkMode 
                             onClick={() => onSelectWorkMode('EASY')}
                             className="p-3 rounded-xl bg-green-50 text-green-700 font-bold text-sm hover:bg-green-100 transition-colors flex justify-between items-center"
                         >
-                            <span>Fácil <span className="font-normal opacity-70 ml-1">(1 Incidencia)</span></span>
+                            <span>Fácil <span className="font-normal opacity-70 ml-1">(Sin Incidencias)</span></span>
                             <i className="fa-solid fa-play"></i>
                         </button>
                         <button 
                             onClick={() => onSelectWorkMode('MEDIUM')}
                             className="p-3 rounded-xl bg-yellow-50 text-yellow-700 font-bold text-sm hover:bg-yellow-100 transition-colors flex justify-between items-center"
                         >
-                            <span>Medio <span className="font-normal opacity-70 ml-1">(2-3 Incidencias)</span></span>
+                            <span>Medio <span className="font-normal opacity-70 ml-1">(1-3 Incidencias)</span></span>
                             <i className="fa-solid fa-play"></i>
                         </button>
                         <button 
                             onClick={() => onSelectWorkMode('HARD')}
                             className="p-3 rounded-xl bg-red-50 text-red-700 font-bold text-sm hover:bg-red-100 transition-colors flex justify-between items-center"
                         >
-                            <span>Difícil <span className="font-normal opacity-70 ml-1">(Caos Total)</span></span>
+                            <span>Difícil <span className="font-normal opacity-70 ml-1">(2-5 Incidencias)</span></span>
                             <i className="fa-solid fa-bomb"></i>
                         </button>
                     </div>
                 </div>
+            </div>
+
+            <div className="mt-auto pt-8 text-center pb-2">
+                <p className="text-xs text-gray-400 font-medium">
+                    Hecho con <i className="fa-solid fa-heart text-red-400 mx-1 animate-pulse"></i> para proyecto de Culturas de Owen Whelan
+                </p>
+                <p className="text-[10px] text-gray-300 mt-1">
+                    v1.0 • No oficial
+                </p>
             </div>
         </div>
     );

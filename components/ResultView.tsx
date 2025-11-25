@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { GameState } from '../types';
-import { analyzeCommute, findOptimalPath } from '../utils/gameLogic';
+import { analyzeCommute, findOptimalPath, generateShareText } from '../utils/gameLogic';
 import PathVisualizer from './PathVisualizer';
 
 interface ResultViewProps {
@@ -11,6 +11,7 @@ interface ResultViewProps {
 
 const ResultView: React.FC<ResultViewProps> = ({ gameState, onReset, onBackToMenu }) => {
     const [showOptimalPath, setShowOptimalPath] = useState(false);
+    const [shareFeedback, setShareFeedback] = useState<string | null>(null);
 
     const results = useMemo(() => 
         analyzeCommute(gameState.path, gameState.transfers, gameState.mode), 
@@ -23,6 +24,41 @@ const ResultView: React.FC<ResultViewProps> = ({ gameState, onReset, onBackToMen
         // Calculate excluding Cercanías for Work Mode
         return findOptimalPath(startStep.station, gameState.targetStation, gameState.outages, true);
     }, [gameState]);
+
+    const handleShare = async () => {
+        const text = generateShareText(
+            gameState.path,
+            gameState.score,
+            gameState.mode,
+            results.rank,
+            gameState.interruptionsEncountered,
+            optimalStats?.steps
+        );
+
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: 'Madrid Metro Quest',
+                    text: text,
+                });
+                setShareFeedback("¡Compartido!");
+            } catch (err) {
+                // User cancelled or not supported, fallback to clipboard
+                copyToClipboard(text);
+            }
+        } else {
+            copyToClipboard(text);
+        }
+        
+        // Clear feedback after 2s
+        setTimeout(() => setShareFeedback(null), 2000);
+    };
+
+    const copyToClipboard = (text: string) => {
+        navigator.clipboard.writeText(text).then(() => {
+            setShareFeedback("¡Copiado al portapapeles!");
+        });
+    };
 
     return (
         <div className="absolute inset-0 bg-white z-20 flex flex-col p-6 overflow-y-auto animate-fade-in scrollbar-hide">
@@ -111,19 +147,32 @@ const ResultView: React.FC<ResultViewProps> = ({ gameState, onReset, onBackToMen
             
             <div className="space-y-3 shrink-0">
                 <button 
-                    onClick={onReset}
-                    className="w-full py-4 bg-blue-600 text-white rounded-full font-bold shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2"
+                    onClick={handleShare}
+                    className="w-full py-4 bg-green-500 text-white rounded-full font-bold shadow-md hover:bg-green-600 active:scale-95 transition-all flex items-center justify-center gap-2"
                 >
-                    <i className="fa-solid fa-rotate-right"></i>
-                    {gameState.mode === 'WORK' ? 'Reintentar Nivel' : 'Jugar Otra Vez'}
+                    {shareFeedback ? (
+                        <span><i className="fa-solid fa-check mr-2"></i>{shareFeedback}</span>
+                    ) : (
+                        <span><i className="fa-solid fa-share-nodes mr-2"></i>Compartir Resultado</span>
+                    )}
                 </button>
-                <button 
-                    onClick={onBackToMenu}
-                    className="w-full py-4 bg-white border-2 border-gray-200 text-gray-700 rounded-full font-bold shadow-sm hover:bg-gray-50 active:scale-95 transition-all flex items-center justify-center gap-2"
-                >
-                    <i className="fa-solid fa-bars"></i>
-                    Menú Principal
-                </button>
+
+                <div className="flex gap-2">
+                    <button 
+                        onClick={onReset}
+                        className="flex-1 py-4 bg-blue-600 text-white rounded-full font-bold shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2"
+                    >
+                        <i className="fa-solid fa-rotate-right"></i>
+                        Reintentar
+                    </button>
+                    <button 
+                        onClick={onBackToMenu}
+                        className="flex-1 py-4 bg-white border-2 border-gray-200 text-gray-700 rounded-full font-bold shadow-sm hover:bg-gray-50 active:scale-95 transition-all flex items-center justify-center gap-2"
+                    >
+                        <i className="fa-solid fa-bars"></i>
+                        Menú
+                    </button>
+                </div>
             </div>
         </div>
     );

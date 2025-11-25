@@ -30,7 +30,7 @@ export const getNeighbors = (lineCode: string, stationName: string): Neighbor[] 
     // Previous Station logic (Towards Index 0)
     if (idx > 0) {
         results.push({ station: lineArr[idx - 1], direction: startLabel });
-    } else if (lineCode === "6" || lineCode === "12") { // Fixed "L6" to "6" to match keys
+    } else if (lineCode === "6" || lineCode === "12") {
         // Circular wrap-around for first element
         results.push({ station: lineArr[lineArr.length - 1], direction: endLabel });
     }
@@ -38,7 +38,7 @@ export const getNeighbors = (lineCode: string, stationName: string): Neighbor[] 
     // Next Station logic (Towards Index Last)
     if (idx < lineArr.length - 1) {
         results.push({ station: lineArr[idx + 1], direction: endLabel });
-    } else if (lineCode === "6" || lineCode === "12") { // Fixed "L6" to "6" to match keys
+    } else if (lineCode === "6" || lineCode === "12") {
         // Circular wrap-around for last element
         results.push({ station: lineArr[0], direction: startLabel });
     }
@@ -106,6 +106,67 @@ export const analyzeCommute = (path: PathStep[], transfers: number, mode: 'FREE'
     };
 };
 
+// --- SHARE FUNCTIONALITY ---
+
+const getLineEmoji = (lineId: string): string => {
+    if (lineId.startsWith('C-')) return '⚪'; // Circle for Cercanías
+    
+    // Approximate square colors
+    switch (lineId) {
+        case '1': return '🟦'; // Blue
+        case '2': return '🟥'; // Red
+        case '3': return '🟨'; // Yellow
+        case '4': return '🟫'; // Brown
+        case '5': return '🟩'; // Green
+        case '6': return '⬜'; // Grey (White square usually looks greyish/silver on many OS)
+        case '7': return '🟧'; // Orange
+        case '8': return '🌸'; // Pink
+        case '9': return '🟪'; // Purple
+        case '10': return '🔵'; // Dark Blue (Circle used as backup for dark blue square shortage)
+        case '11': return '🟢'; // Dark Green
+        case '12': return '🔶'; // Gold/Khaki
+        case 'R': return '⬜';
+        default: return '⬛';
+    }
+};
+
+export const generateShareText = (
+    path: PathStep[], 
+    score: number, 
+    mode: 'FREE' | 'WORK', 
+    rank: string, 
+    interruptions: number,
+    optimalStops: number | undefined
+): string => {
+    let emojiPath = "";
+    
+    path.forEach(step => {
+        if (step.type === 'travel' && step.lineUsed) {
+            emojiPath += getLineEmoji(step.lineUsed);
+        } else if (step.type === 'transfer') {
+            emojiPath += "➡️";
+        }
+    });
+
+    // Limit emoji path length for readability
+    if (emojiPath.length > 50) {
+        emojiPath = emojiPath.substring(0, 48) + "...";
+    }
+
+    if (mode === 'FREE') {
+        return `METRO QUEST 🚇\nPuntuación: ${score} | Soy: ${rank}\n${emojiPath}`;
+    } else {
+        const stops = path.filter(p => p.type === 'travel').length;
+        // Avoid division by zero
+        const efficiency = optimalStops && optimalStops > 0 
+            ? Math.round((optimalStops / stops) * 100) 
+            : 100;
+            
+        return `METRO QUEST 🚇\nEficiencia: ${efficiency}% | ⚠️ ${interruptions}\n${emojiPath}`;
+    }
+};
+
+
 // --- BFS & LEVEL GEN ---
 
 interface BFSNode {
@@ -129,7 +190,6 @@ export const findOptimalPath = (
     const visited = new Set<string>(); // "station|line"
 
     // Initialize with origin
-    // We treat the first move as a "start" on a line
     const startLines = getLinesForStation(start);
     startLines.forEach(l => {
         if (excludeCercanias && l.startsWith('C-')) return;
@@ -153,9 +213,7 @@ export const findOptimalPath = (
             const path: PathStep[] = [];
             let node: BFSNode | null = curr;
             while (node) {
-                if (node.action !== 'origin') { // Don't add origin here if we want to match game structure exactly, or add it.
-                    // The game structure usually starts with an 'origin' step, then 'start' or 'transfer'.
-                    // Our parent chain includes the origin dummy node.
+                if (node.action !== 'origin') {
                     path.unshift({
                         id: `opt-${node.station}-${node.depth}`,
                         station: node.station,
@@ -237,47 +295,60 @@ export const generateLevel = (difficulty: Difficulty) => {
     let attempts = 0;
 
     // Filter stations suitable for work mode (exclude pure Cercanias stations if possible, or just accept them)
-    // Ideally we pick stations that have Metro connections.
     const metroStations = allStations.filter(s => getLinesForStation(s).some(l => !l.startsWith('C-')));
 
     while (!isValid && attempts < 100) {
         attempts++;
         outages = [];
 
-        // 1. Pick Start
+        // 1. Pick Start & End
         let pool = metroStations;
-        if (difficulty === 'EASY') {
-            const popular = ['Sol', 'Nuevos Ministerios', 'Atocha', 'Chamartín', 'Moncloa'];
-            pool = popular;
-        } else if (difficulty === 'MEDIUM') {
-            const medium = ['Legazpi', 'Tribunal', 'Plaza de Castilla', 'Cuatro Caminos', 'Pacifico'];
-            pool = medium;
-        } else {
-            // Hard - Rarity >= 3
+        // In Hard mode, pick rarer starts
+        if (difficulty === 'HARD') {
             pool = metroStations.filter(s => (STATION_RARITY[s] || 2) >= 3);
+        } else if (difficulty === 'EASY') {
+            pool = ['Sol', 'Nuevos Ministerios', 'Atocha', 'Chamartín', 'Moncloa'];
         }
+        
         start = pool[Math.floor(Math.random() * pool.length)];
-
-        // 2. Pick End (Random but distinct, reachable via Metro)
         do {
             end = metroStations[Math.floor(Math.random() * metroStations.length)];
         } while (end === start);
 
-        // 3. Generate Outages intelligently
-        const interruptionCount = difficulty === 'EASY' ? 1 : difficulty === 'MEDIUM' ? 3 : 6; 
+        // 2. Determine Outage Constraints
+        let targetOutages = 0;
+        let minOutages = 0;
+
+        if (difficulty === 'EASY') {
+            targetOutages = 0;
+            minOutages = 0;
+        } else if (difficulty === 'MEDIUM') {
+            minOutages = 1;
+            targetOutages = Math.floor(Math.random() * 3) + 1; // 1 to 3
+        } else { // HARD
+            minOutages = 2;
+            targetOutages = Math.floor(Math.random() * 4) + 2; // 2 to 5
+        }
         
-        let validPathExists = true;
-
-        for (let i = 0; i < interruptionCount; i++) {
-            // Calculate current optimal path with existing outages, excluding Cercanías
-            const currentRoute = findOptimalPath(start, end, outages, true);
-            
-            if (!currentRoute) {
-                validPathExists = false;
-                break;
+        if (targetOutages === 0) {
+            // For Easy mode, just verify path exists
+            if (findOptimalPath(start, end, [], true)) {
+                isValid = true;
+                return { start, end, outages: [] };
             }
+            continue;
+        }
 
-            // Find travel segments in the current optimal path
+        // 3. Iteratively break the optimal path
+        let outageAttempts = 0;
+        while (outages.length < targetOutages && outageAttempts < 20) {
+            outageAttempts++;
+            
+            // Calculate current optimal path with existing outages
+            const currentRoute = findOptimalPath(start, end, outages, true);
+            if (!currentRoute) break; // Should exist because we check validity later, but safe to break
+
+            // Find valid travel segments to break
             const travelSegments: { from: string, to: string, line: string }[] = [];
             for (let j = 1; j < currentRoute.fullPath.length; j++) {
                 const step = currentRoute.fullPath[j];
@@ -287,11 +358,15 @@ export const generateLevel = (difficulty: Difficulty) => {
                 }
             }
 
-            if (travelSegments.length === 0) break;
+            // Safe filtering: Don't break connections directly touching start/end to avoid instant frustration
+            const safeSegments = travelSegments.filter(s => 
+                s.to !== end && s.from !== end && s.to !== start && s.from !== start
+            );
 
-            // Pick a random segment from the optimal path to break
-            // This forces the user to find a new route
-            const segmentToBreak = travelSegments[Math.floor(Math.random() * travelSegments.length)];
+            if (safeSegments.length === 0) break; // Can't break this path safely anymore
+
+            // Pick a random segment to break
+            const segmentToBreak = safeSegments[Math.floor(Math.random() * safeSegments.length)];
             const newOutage: Outage = {
                 fromStation: segmentToBreak.from,
                 toStation: segmentToBreak.to,
@@ -302,17 +377,21 @@ export const generateLevel = (difficulty: Difficulty) => {
             const testOutages = [...outages, newOutage];
             if (findOptimalPath(start, end, testOutages, true)) {
                 outages.push(newOutage);
-            } else {
-                // If breaking this makes it impossible, try to break a different random edge in the network
-                // just to add noise, or skip adding an outage this turn.
-                // For now, we skip to keep it solvable.
             }
         }
         
-        // Final check
-        if (findOptimalPath(start, end, outages, true)) {
-            isValid = true;
+        // 4. Validate Minimum Requirements
+        if (outages.length >= minOutages) {
+             // Final check
+             if (findOptimalPath(start, end, outages, true)) {
+                isValid = true;
+             }
         }
+    }
+
+    if (!isValid) {
+        // Fallback safe level
+        return { start: "Sol", end: "Moncloa", outages: [] };
     }
 
     return { start, end, outages };
