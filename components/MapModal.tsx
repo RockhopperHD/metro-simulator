@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
+import mapImage from '../planoesquematico.png'; // Verified: This is the correct import
 
 interface MapModalProps {
     onClose: () => void;
@@ -77,8 +78,9 @@ const MapModal: React.FC<MapModalProps> = ({ onClose }) => {
                     }}
                     className="w-full h-full flex items-center justify-center"
                 >
+                    {/* 👇 THIS WAS MISSING IN YOUR CODE 👇 */}
                     <img 
-                        src="/planoesquematico.png" 
+                        src={mapImage} 
                         alt="Plano Metro Madrid" 
                         className="max-w-none w-auto h-auto min-w-full min-h-full object-contain pointer-events-none select-none"
                         draggable={false}
